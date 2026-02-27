@@ -1,6 +1,6 @@
 # flutter_application_1
 
-bai flutter moi
+bai thuc hanh
 
 ## Getting Started
 
