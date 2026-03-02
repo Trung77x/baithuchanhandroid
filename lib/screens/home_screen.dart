@@ -110,10 +110,12 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: Text(
           'Smart Note - $studentName - $studentId',
-          style: const TextStyle(fontSize: 16),
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
-        backgroundColor: Colors.blue,
-        elevation: 2,
+        backgroundColor: const Color(0xFF06A77D),
+        foregroundColor: Colors.white,
+        elevation: 4,
+        shadowColor: const Color(0xFF06A77D).withValues(alpha: 0.3),
       ),
       body: RefreshIndicator(
         onRefresh: _loadNotes,
@@ -125,8 +127,12 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  'Số ghi chú: ${_allNotes.length}',
-                  style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+                  'Tổng cộng: ${_allNotes.length} ghi chú',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[700],
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
             ),
@@ -137,19 +143,33 @@ class _HomeScreenState extends State<HomeScreen> {
                 controller: _searchController,
                 decoration: InputDecoration(
                   hintText: 'Tìm kiếm ghi chú...',
-                  prefixIcon: const Icon(Icons.search),
+                  prefixIcon: const Icon(
+                    Icons.search,
+                    color: Color(0xFF06A77D),
+                  ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Colors.grey),
+                    borderSide: const BorderSide(
+                      color: Color(0xFFE0E0E0),
+                      width: 1.5,
+                    ),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Colors.grey),
+                    borderSide: const BorderSide(
+                      color: Color(0xFFE0E0E0),
+                      width: 1.5,
+                    ),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Colors.blue),
+                    borderSide: const BorderSide(
+                      color: Color(0xFF06A77D),
+                      width: 2,
+                    ),
                   ),
+                  filled: true,
+                  fillColor: const Color(0xFFFAFAFA),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 12,
@@ -178,7 +198,9 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _navigateToEditScreen(null),
-        backgroundColor: Colors.blue,
+        backgroundColor: const Color(0xFF06A77D),
+        foregroundColor: Colors.white,
+        elevation: 4,
         child: const Icon(Icons.add, size: 28),
       ),
     );
@@ -239,43 +261,158 @@ class _HomeScreenState extends State<HomeScreen> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Title
-                Text(
-                  note.title.isEmpty ? 'Ghi chú mới' : note.title,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    overflow: TextOverflow.ellipsis,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 200),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Title
+                  Text(
+                    note.title.isEmpty ? 'Ghi chú mới' : note.title,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    maxLines: 1,
                   ),
-                  maxLines: 1,
-                ),
-                const SizedBox(height: 8),
-                // Content Summary
-                Text(
-                  note.content,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.grey[700],
-                    overflow: TextOverflow.ellipsis,
+                  const SizedBox(height: 6),
+                  // Content Summary
+                  Text(
+                    note.content,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey[700],
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    maxLines: 3,
                   ),
-                  maxLines: 3,
-                ),
-                const SizedBox(height: 12),
-                // Timestamp
-                Align(
-                  alignment: Alignment.bottomRight,
-                  child: Text(
-                    _formatDateTime(note.updatedAt),
-                    style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                  const SizedBox(height: 6),
+                  // Media Indicators
+                  Row(
+                    children: [
+                      if (note.imageBase64 != null)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.amber[100],
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.image,
+                                  size: 14,
+                                  color: Colors.amber[700],
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Ảnh',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.amber[700],
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      if (note.signaturePoints != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.blue[100],
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.edit_note,
+                                size: 14,
+                                color: Colors.blue[700],
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Chữ ký',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.blue[700],
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
                   ),
-                ),
-              ],
+                  const SizedBox(height: 8),
+                  // Image + Signature previews
+                  if (note.imageBase64 != null ||
+                      (note.signaturePoints != null &&
+                          note.signaturePoints!.isNotEmpty))
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (note.imageBase64 != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 6.0),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.memory(
+                                base64Decode(note.imageBase64!),
+                                height: 120,
+                                width: double.infinity,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          ),
+                        if (note.signaturePoints != null &&
+                            note.signaturePoints!.isNotEmpty)
+                          Container(
+                            height: 80,
+                            width: double.infinity,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.blue[50]!),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: CustomPaint(
+                                painter: SignaturePainter(
+                                  note.signaturePoints!,
+                                ),
+                                size: const Size(double.infinity, 80),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  const SizedBox(height: 12),
+                  // Timestamp
+                  Align(
+                    alignment: Alignment.bottomRight,
+                    child: Text(
+                      _formatDateTime(note.updatedAt),
+                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

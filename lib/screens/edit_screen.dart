@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:async';
+import 'dart:convert';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io' show Platform;
+import 'package:image/image.dart' as img;
 import '../models/note_model.dart';
 import '../services/note_service.dart';
+import '../widgets/signature_dialog.dart';
 
 class EditScreen extends StatefulWidget {
   final Note? note;
@@ -20,6 +25,7 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
   late Note _currentNote;
   bool _hasChanges = false;
   Timer? _saveTimer;
+  final ImagePicker _imagePicker = ImagePicker();
 
   bool get _hasContent {
     return _titleController.text.trim().isNotEmpty ||
@@ -42,6 +48,8 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
         content: '',
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
+        imageBase64: null,
+        signaturePoints: null,
       );
       _titleController = TextEditingController();
       _contentController = TextEditingController();
@@ -76,6 +84,15 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
       title: _titleController.text,
       content: _contentController.text,
       updatedAt: DateTime.now(),
+      imageBase64: _currentNote.imageBase64,
+      signaturePoints: _currentNote.signaturePoints,
+    );
+
+    debugPrint(
+      'Saving note: id=${updatedNote.id}, title=${updatedNote.title}, '
+      'hasImage=${updatedNote.imageBase64 != null}, '
+      'hasSignature=${updatedNote.signaturePoints != null}, '
+      'signaturePoints=${updatedNote.signaturePoints}',
     );
 
     await _noteService.saveNote(updatedNote);
@@ -115,6 +132,301 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
     });
   }
 
+  Future<void> _pickImageFromSource(ImageSource source) async {
+    try {
+      final XFile? imageFile = await _imagePicker.pickImage(
+        source: source,
+        maxWidth: 1280,
+        maxHeight: 1280,
+        imageQuality: 80,
+      );
+
+      if (imageFile == null) return;
+
+      final bytes = await imageFile.readAsBytes();
+      final decoded = img.decodeImage(bytes);
+      if (decoded == null) return;
+
+      final base64String = base64Encode(bytes);
+
+      // Save before updating UI to avoid race conditions
+      final updatedNote = _currentNote.copyWith(imageBase64: base64String);
+      await _noteService.saveNote(updatedNote);
+
+      if (mounted) {
+        setState(() {
+          _currentNote = updatedNote;
+          _markAsChanged();
+        });
+      }
+    } catch (e) {
+      debugPrint('Error picking/capturing image: $e');
+    }
+  }
+
+  void _showImageOptions() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (Platform.isAndroid || Platform.isIOS)
+                ListTile(
+                  leading: const Icon(Icons.camera_alt),
+                  title: const Text('Chụp ảnh'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _pickImageFromSource(ImageSource.camera);
+                  },
+                ),
+              ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: const Text('Chọn từ thư viện'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickImageFromSource(ImageSource.gallery);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.close),
+                title: const Text('Hủy'),
+                onTap: () => Navigator.pop(context),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _pickSignature() async {
+    if (!mounted) return;
+
+    final signaturePoints = await showDialog<List<List<double>>?>(
+      context: context,
+      builder: (BuildContext context) {
+        return const SignatureDialog();
+      },
+    );
+
+    debugPrint('SignatureDialog returned: $signaturePoints');
+
+    if (signaturePoints != null && signaturePoints.isNotEmpty) {
+      debugPrint('Signature points count: ${signaturePoints.length}');
+
+      // Update model and save BEFORE state update to avoid race condition
+      final updatedNote = _currentNote.copyWith(
+        signaturePoints: signaturePoints,
+      );
+      debugPrint('Updated note: ${updatedNote.signaturePoints}');
+
+      await _noteService.saveNote(updatedNote);
+
+      // NOW update state with saved data
+      if (mounted) {
+        setState(() {
+          _currentNote = updatedNote;
+          _markAsChanged();
+        });
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Chữ ký rỗng')));
+      }
+    }
+  }
+
+  void _removeImage() {
+    final updatedNote = _currentNote.copyWith(imageBase64: null);
+    _noteService.saveNote(updatedNote);
+    setState(() {
+      _currentNote = updatedNote;
+      _markAsChanged();
+    });
+  }
+
+  void _removeSignature() {
+    final updatedNote = _currentNote.copyWith(signaturePoints: null);
+    _noteService.saveNote(updatedNote);
+    setState(() {
+      _currentNote = updatedNote;
+      _markAsChanged();
+    });
+  }
+
+  Widget _buildImagePreview() {
+    if (_currentNote.imageBase64 == null) {
+      return const SizedBox.shrink();
+    }
+
+    try {
+      final imageBytes = base64Decode(_currentNote.imageBase64!);
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.amber[100],
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Icon(Icons.image, color: Colors.amber[700], size: 18),
+                ),
+                const SizedBox(width: 10),
+                const Text(
+                  'Hình ảnh',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
+          ),
+          Stack(
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.blue.withValues(alpha: 0.12),
+                      blurRadius: 8,
+                      spreadRadius: 1,
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.memory(
+                    imageBytes,
+                    height: 180,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 12,
+                right: 12,
+                child: GestureDetector(
+                  onTap: _removeImage,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.red[500],
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.red.withValues(alpha: 0.4),
+                          blurRadius: 8,
+                          spreadRadius: 1,
+                        ),
+                      ],
+                    ),
+                    padding: const EdgeInsets.all(8),
+                    child: const Icon(
+                      Icons.close,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
+    } catch (e) {
+      debugPrint('Error displaying image: $e');
+      return const SizedBox.shrink();
+    }
+  }
+
+  Widget _buildSignaturePreview() {
+    if (_currentNote.signaturePoints == null ||
+        _currentNote.signaturePoints!.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 4),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.blue[100],
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Icon(Icons.edit_note, color: Colors.blue[700], size: 18),
+              ),
+              const SizedBox(width: 10),
+              const Text(
+                'Chữ ký',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+        ),
+        Stack(
+          children: [
+            Container(
+              height: 120,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.blue[300]!, width: 2),
+                borderRadius: BorderRadius.circular(12),
+                color: Colors.blue[50],
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.blue.withValues(alpha: 0.12),
+                    blurRadius: 8,
+                    spreadRadius: 1,
+                  ),
+                ],
+              ),
+              child: CustomPaint(
+                painter: SignaturePainter(_currentNote.signaturePoints!),
+              ),
+            ),
+            Positioned(
+              top: 12,
+              right: 12,
+              child: GestureDetector(
+                onTap: _removeSignature,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.red[500],
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.red.withValues(alpha: 0.4),
+                        blurRadius: 8,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                  padding: const EdgeInsets.all(8),
+                  child: const Icon(Icons.close, color: Colors.white, size: 20),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
@@ -124,9 +436,14 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Ghi chú'),
-          backgroundColor: Colors.blue,
-          elevation: 0,
+          title: const Text(
+            'Ghi chú',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+          backgroundColor: const Color(0xFF06A77D),
+          foregroundColor: Colors.white,
+          elevation: 4,
+          shadowColor: const Color(0xFF06A77D).withValues(alpha: 0.3),
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
             onPressed: () => _handleBackButton(context),
@@ -154,10 +471,10 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
                   ),
                   maxLines: null,
                 ),
-                const SizedBox(height: 16),
-                Divider(color: Colors.grey[300]),
-                const SizedBox(height: 16),
-                // Content Input
+                const SizedBox(height: 4),
+                Divider(color: Colors.grey[300], height: 1),
+                const SizedBox(height: 4),
+                // Content Input (expanded)
                 TextField(
                   controller: _contentController,
                   decoration: const InputDecoration(
@@ -166,15 +483,105 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.zero,
                   ),
-                  style: const TextStyle(fontSize: 16),
+                  style: const TextStyle(fontSize: 18),
+                  keyboardType: TextInputType.multiline,
+                  minLines: 6,
                   maxLines: null,
-                  expands: false,
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 6),
+                // Media Buttons Row - Modern Card Design
+                Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.teal[50]!, Colors.teal[100]!],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: const Color(0xFF06A77D).withValues(alpha: 0.1),
+                      width: 1.5,
+                    ),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      Flexible(
+                        child: ElevatedButton.icon(
+                          onPressed: _showImageOptions,
+                          icon: const Icon(Icons.image_outlined, size: 20),
+                          label: const Text('Ảnh'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF06A77D),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            elevation: 3,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Flexible(
+                        child: ElevatedButton.icon(
+                          onPressed: _pickSignature,
+                          icon: const Icon(Icons.edit_note, size: 20),
+                          label: const Text('Chữ ký'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue[600],
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            elevation: 3,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 4),
+                // Image Preview
+                _buildImagePreview(),
+                // Signature Preview
+                _buildSignaturePreview(),
+                const SizedBox(height: 20),
                 // Timestamp Info
-                Text(
-                  'Lần cập nhật cuối: ${_formatDateTime(DateTime.now())}',
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.schedule, size: 16, color: Colors.grey[600]),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Cập nhật: ${_formatDateTime(DateTime.now())}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -202,5 +609,41 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
 
   String _formatDateTime(DateTime dateTime) {
     return '${dateTime.day}/${dateTime.month}/${dateTime.year} ${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+// Custom painter for rendering signature
+class SignaturePainter extends CustomPainter {
+  final List<List<double>> points;
+
+  SignaturePainter(this.points);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFF06A77D)
+      ..strokeWidth = 2.5
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..isAntiAlias = true;
+
+    for (int i = 0; i < points.length - 1; i++) {
+      // separator
+      if (points[i][0] == -1 && points[i][1] == -1) continue;
+      if (points[i + 1][0] == -1 && points[i + 1][1] == -1) continue;
+
+      // points stored normalized 0..1, scale to canvas
+      final p1 = Offset(points[i][0] * size.width, points[i][1] * size.height);
+      final p2 = Offset(
+        points[i + 1][0] * size.width,
+        points[i + 1][1] * size.height,
+      );
+      canvas.drawLine(p1, p2, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(SignaturePainter oldDelegate) {
+    return oldDelegate.points != points;
   }
 }
