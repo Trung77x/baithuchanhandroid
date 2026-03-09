@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
+import 'dart:convert';
 import '../models/note_model.dart';
 import '../services/note_service.dart';
+import '../services/auth_service.dart';
 import 'edit_screen.dart';
 
 // TODO: Replace with your actual name and ID
@@ -17,6 +19,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final NoteService _noteService = NoteService();
+  final AuthService _authService = AuthService();
   List<Note> _allNotes = [];
   List<Note> _filteredNotes = [];
   final TextEditingController _searchController = TextEditingController();
@@ -112,10 +115,54 @@ class _HomeScreenState extends State<HomeScreen> {
           'Smart Note - $studentName - $studentId',
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
-        backgroundColor: const Color(0xFF06A77D),
-        foregroundColor: Colors.white,
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
         elevation: 4,
-        shadowColor: const Color(0xFF06A77D).withValues(alpha: 0.3),
+        shadowColor: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+        actions: [
+          PopupMenuButton<String>(
+            onSelected: (String value) async {
+              if (value == 'logout') {
+                await _authService.signOut();
+                if (mounted) {
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(const SnackBar(content: Text('Đã đăng xuất')));
+                }
+              }
+            },
+            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+              PopupMenuItem<String>(
+                value: 'user',
+                enabled: false,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _authService.currentUser?.displayName ?? 'Người dùng',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      _authService.currentUser?.email ?? '',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem<String>(
+                value: 'logout',
+                child: Row(
+                  children: [
+                    Icon(Icons.logout),
+                    SizedBox(width: 8),
+                    Text('Đăng Xuất'),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
       body: RefreshIndicator(
         onRefresh: _loadNotes,
@@ -143,9 +190,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 controller: _searchController,
                 decoration: InputDecoration(
                   hintText: 'Tìm kiếm ghi chú...',
-                  prefixIcon: const Icon(
+                  prefixIcon: Icon(
                     Icons.search,
-                    color: Color(0xFF06A77D),
+                    color: Theme.of(context).colorScheme.primary,
                   ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -163,8 +210,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(
-                      color: Color(0xFF06A77D),
+                    borderSide: BorderSide(
+                      color: Theme.of(context).colorScheme.primary,
                       width: 2,
                     ),
                   ),
@@ -198,8 +245,8 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _navigateToEditScreen(null),
-        backgroundColor: const Color(0xFF06A77D),
-        foregroundColor: Colors.white,
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
         elevation: 4,
         child: const Icon(Icons.add, size: 28),
       ),
@@ -262,7 +309,8 @@ class _HomeScreenState extends State<HomeScreen> {
             borderRadius: BorderRadius.circular(12),
           ),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 200),
+            // lowered min height to avoid overly tall cards for short notes
+            constraints: const BoxConstraints(minHeight: 120),
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Column(
@@ -273,7 +321,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   Text(
                     note.title.isEmpty ? 'Ghi chú mới' : note.title,
                     style: const TextStyle(
-                      fontSize: 14,
+                      fontSize: 18, // larger title per request
                       fontWeight: FontWeight.bold,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -284,7 +332,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   Text(
                     note.content,
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: 17, // larger content text
                       color: Colors.grey[700],
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -312,14 +360,18 @@ class _HomeScreenState extends State<HomeScreen> {
                                 Icon(
                                   Icons.image,
                                   size: 14,
-                                  color: Colors.amber[700],
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.secondary,
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
                                   'Ảnh',
                                   style: TextStyle(
                                     fontSize: 11,
-                                    color: Colors.amber[700],
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.secondary,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
@@ -334,7 +386,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             vertical: 4,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.blue[100],
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.secondaryContainer,
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Row(
@@ -343,14 +397,16 @@ class _HomeScreenState extends State<HomeScreen> {
                               Icon(
                                 Icons.edit_note,
                                 size: 14,
-                                color: Colors.blue[700],
+                                color: Theme.of(context).colorScheme.secondary,
                               ),
                               const SizedBox(width: 4),
                               Text(
                                 'Chữ ký',
                                 style: TextStyle(
                                   fontSize: 11,
-                                  color: Colors.blue[700],
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.secondary,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
@@ -395,6 +451,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               child: CustomPaint(
                                 painter: SignaturePainter(
                                   note.signaturePoints!,
+                                  color: Theme.of(context).colorScheme.primary,
                                 ),
                                 size: const Size(double.infinity, 80),
                               ),

@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "413360382904",
+    "project_id": "smart-note-2e53e",
+    "storage_bucket": "smart-note-2e53e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:413360382904:android:351bbe219aff9821ae654d",
+        "android_client_info": {
+          "package_name": "com.example.flutter_application_1"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "413360382904-8jk6rus4u2m4lhil6klinbp8ajguku4k.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.flutter_application_1",
+            "certificate_hash": "195367d0eba8e1a0f29928eca6fd5bb9d4dd1365"
+          }
+        },
+        {
+          "client_id": "413360382904-lcbr0ndivgtu7qt2vo5glbfkmh6c7eck.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyChSJ1WF85wuoo-9EmR7sHWxq2eQafid9k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "413360382904-lcbr0ndivgtu7qt2vo5glbfkmh6c7eck.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

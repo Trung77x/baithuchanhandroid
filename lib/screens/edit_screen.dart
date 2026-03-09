@@ -319,7 +319,7 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
                   onTap: _removeImage,
                   child: Container(
                     decoration: BoxDecoration(
-                      color: Colors.red[500],
+                      color: Theme.of(context).colorScheme.error,
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
@@ -384,19 +384,29 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
               height: 120,
               width: double.infinity,
               decoration: BoxDecoration(
-                border: Border.all(color: Colors.blue[300]!, width: 2),
+                border: Border.all(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.secondary.withValues(alpha: 0.6),
+                  width: 2,
+                ),
                 borderRadius: BorderRadius.circular(12),
-                color: Colors.blue[50],
+                color: Theme.of(context).colorScheme.secondaryContainer,
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.blue.withValues(alpha: 0.12),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.secondary.withValues(alpha: 0.12),
                     blurRadius: 8,
                     spreadRadius: 1,
                   ),
                 ],
               ),
               child: CustomPaint(
-                painter: SignaturePainter(_currentNote.signaturePoints!),
+                painter: SignaturePainter(
+                  _currentNote.signaturePoints!,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
               ),
             ),
             Positioned(
@@ -406,11 +416,13 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
                 onTap: _removeSignature,
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Colors.red[500],
+                    color: Theme.of(context).colorScheme.error,
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.red.withValues(alpha: 0.4),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.error.withOpacity(0.4),
                         blurRadius: 8,
                         spreadRadius: 1,
                       ),
@@ -440,10 +452,10 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
             'Ghi chú',
             style: TextStyle(fontWeight: FontWeight.w600),
           ),
-          backgroundColor: const Color(0xFF06A77D),
-          foregroundColor: Colors.white,
+          backgroundColor: Theme.of(context).colorScheme.primary,
+          foregroundColor: Theme.of(context).colorScheme.onPrimary,
           elevation: 4,
-          shadowColor: const Color(0xFF06A77D).withValues(alpha: 0.3),
+          shadowColor: Theme.of(context).colorScheme.primary.withOpacity(0.3),
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
             onPressed: () => _handleBackButton(context),
@@ -475,6 +487,9 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
                 Divider(color: Colors.grey[300], height: 1),
                 const SizedBox(height: 4),
                 // Content Input (expanded)
+                // Content input; limit max lines so the box returns to a
+                // reasonable size after editing long notes. When the user
+                // types more than 12 lines the field will scroll internally.
                 TextField(
                   controller: _contentController,
                   decoration: const InputDecoration(
@@ -486,20 +501,25 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
                   style: const TextStyle(fontSize: 18),
                   keyboardType: TextInputType.multiline,
                   minLines: 6,
-                  maxLines: null,
+                  maxLines: 12,
                 ),
                 const SizedBox(height: 6),
                 // Media Buttons Row - Modern Card Design
                 Container(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [Colors.teal[50]!, Colors.teal[100]!],
+                      colors: [
+                        Theme.of(context).colorScheme.primaryContainer,
+                        Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                      ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: const Color(0xFF06A77D).withValues(alpha: 0.1),
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.primary.withValues(alpha: 0.1),
                       width: 1.5,
                     ),
                   ),
@@ -516,8 +536,12 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
                           icon: const Icon(Icons.image_outlined, size: 20),
                           label: const Text('Ảnh'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF06A77D),
-                            foregroundColor: Colors.white,
+                            backgroundColor: Theme.of(
+                              context,
+                            ).colorScheme.primary,
+                            foregroundColor: Theme.of(
+                              context,
+                            ).colorScheme.onPrimary,
                             padding: const EdgeInsets.symmetric(
                               horizontal: 12,
                               vertical: 6,
@@ -536,8 +560,12 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
                           icon: const Icon(Icons.edit_note, size: 20),
                           label: const Text('Chữ ký'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue[600],
-                            foregroundColor: Colors.white,
+                            backgroundColor: Theme.of(
+                              context,
+                            ).colorScheme.secondary,
+                            foregroundColor: Theme.of(
+                              context,
+                            ).colorScheme.onSecondary,
                             padding: const EdgeInsets.symmetric(
                               horizontal: 12,
                               vertical: 6,
@@ -615,13 +643,14 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
 // Custom painter for rendering signature
 class SignaturePainter extends CustomPainter {
   final List<List<double>> points;
+  final Color color;
 
-  SignaturePainter(this.points);
+  SignaturePainter(this.points, {required this.color});
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = const Color(0xFF06A77D)
+      ..color = color
       ..strokeWidth = 2.5
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round

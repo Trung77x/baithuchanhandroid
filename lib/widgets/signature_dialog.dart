@@ -69,9 +69,12 @@ class _SignatureDialogState extends State<SignatureDialog> {
                   horizontal: 16,
                   vertical: 12,
                 ),
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [Color(0xFF06A77D), Color(0xFF048860)],
+                    colors: [
+                      Theme.of(context).colorScheme.primary,
+                      Theme.of(context).colorScheme.primaryContainer,
+                    ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -155,7 +158,10 @@ class _SignatureDialogState extends State<SignatureDialog> {
                         onPointerUp: (_) =>
                             setState(() => _points.add(const Offset(-1, -1))),
                         child: CustomPaint(
-                          painter: _DialogSignaturePainter(_points),
+                          painter: _DialogSignaturePainter(
+                            _points,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
                           size: Size.infinite,
                         ),
                       );
@@ -178,7 +184,7 @@ class _SignatureDialogState extends State<SignatureDialog> {
                       icon: const Icon(Icons.delete_outline),
                       label: const Text('Xóa'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red[400],
+                        backgroundColor: Theme.of(context).colorScheme.error,
                       ),
                     ),
                     ElevatedButton.icon(
@@ -186,7 +192,7 @@ class _SignatureDialogState extends State<SignatureDialog> {
                       icon: const Icon(Icons.check),
                       label: const Text('Lưu chữ ký'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF06A77D),
+                        backgroundColor: Theme.of(context).colorScheme.primary,
                       ),
                     ),
                   ],
@@ -202,13 +208,14 @@ class _SignatureDialogState extends State<SignatureDialog> {
 
 class _DialogSignaturePainter extends CustomPainter {
   final List<Offset> points; // normalized 0..1 plus separators
+  final Color color;
 
-  _DialogSignaturePainter(this.points);
+  _DialogSignaturePainter(this.points, {required this.color});
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = const Color(0xFF06A77D)
+      ..color = color
       ..strokeWidth = 2.5
       ..strokeCap = StrokeCap.round
       ..isAntiAlias = true;
@@ -226,5 +233,5 @@ class _DialogSignaturePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _DialogSignaturePainter oldDelegate) =>
-      oldDelegate.points != points;
+      oldDelegate.points != points || oldDelegate.color != color;
 }
