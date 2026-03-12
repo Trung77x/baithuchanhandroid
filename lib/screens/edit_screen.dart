@@ -4,7 +4,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io' show Platform;
-import 'package:image/image.dart' as img;
 import '../models/note_model.dart';
 import '../services/note_service.dart';
 import '../widgets/signature_dialog.dart';
@@ -133,6 +132,8 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _pickImageFromSource(ImageSource source) async {
+    // Pause auto-save to avoid race conditions
+    _saveTimer?.cancel();
     try {
       final XFile? imageFile = await _imagePicker.pickImage(
         source: source,
@@ -144,23 +145,44 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
       if (imageFile == null) return;
 
       final bytes = await imageFile.readAsBytes();
-      final decoded = img.decodeImage(bytes);
-      if (decoded == null) return;
+      if (bytes.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Không đọc được ảnh')));
+        }
+        return;
+      }
 
       final base64String = base64Encode(bytes);
 
-      // Save before updating UI to avoid race conditions
-      final updatedNote = _currentNote.copyWith(imageBase64: base64String);
-      await _noteService.saveNote(updatedNote);
+      // Update state FIRST to avoid auto-save race condition
+      setState(() {
+        _currentNote = _currentNote.copyWith(imageBase64: base64String);
+        _hasChanges = true;
+      });
+
+      // Then persist
+      await _noteService.saveNote(
+        _currentNote.copyWith(
+          title: _titleController.text,
+          content: _contentController.text,
+          updatedAt: DateTime.now(),
+        ),
+      );
 
       if (mounted) {
-        setState(() {
-          _currentNote = updatedNote;
-          _markAsChanged();
-        });
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Đã thêm ảnh thành công')));
       }
     } catch (e) {
       debugPrint('Error picking/capturing image: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Lỗi thêm ảnh: $e')));
+      }
     }
   }
 
@@ -204,6 +226,9 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
   Future<void> _pickSignature() async {
     if (!mounted) return;
 
+    // Pause auto-save to avoid race conditions
+    _saveTimer?.cancel();
+
     final signaturePoints = await showDialog<List<List<double>>?>(
       context: context,
       builder: (BuildContext context) {
@@ -216,20 +241,25 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
     if (signaturePoints != null && signaturePoints.isNotEmpty) {
       debugPrint('Signature points count: ${signaturePoints.length}');
 
-      // Update model and save BEFORE state update to avoid race condition
-      final updatedNote = _currentNote.copyWith(
-        signaturePoints: signaturePoints,
+      // Update state FIRST to prevent auto-save from overwriting
+      setState(() {
+        _currentNote = _currentNote.copyWith(signaturePoints: signaturePoints);
+        _hasChanges = true;
+      });
+
+      // Then persist with latest title/content
+      await _noteService.saveNote(
+        _currentNote.copyWith(
+          title: _titleController.text,
+          content: _contentController.text,
+          updatedAt: DateTime.now(),
+        ),
       );
-      debugPrint('Updated note: ${updatedNote.signaturePoints}');
 
-      await _noteService.saveNote(updatedNote);
-
-      // NOW update state with saved data
       if (mounted) {
-        setState(() {
-          _currentNote = updatedNote;
-          _markAsChanged();
-        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đã thêm chữ ký thành công')),
+        );
       }
     } else {
       if (mounted) {

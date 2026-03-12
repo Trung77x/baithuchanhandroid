@@ -1,14 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'firebase_options.dart';
-import 'screens/home_screen.dart';
+import 'main_navigation.dart';
 import 'screens/login_screen.dart';
 import 'screens/signup_screen.dart';
 import 'services/auth_service.dart';
+import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await initializeDateFormatting('vi_VN', null);
+  try {
+    await NotificationService().init();
+  } catch (e) {
+    debugPrint('NotificationService init error: $e');
+  }
   runApp(const MyApp());
 }
 
@@ -48,7 +57,7 @@ class _MyAppState extends State<MyApp> {
         builder: (context, snapshot) {
           // User is signed in
           if (snapshot.data != null) {
-            return const HomeScreen();
+            return const MainNavigation();
           }
 
           // User is not signed in - show sign up or login screen
