@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
 import 'package:google_sign_in/google_sign_in.dart';
 
@@ -19,7 +20,14 @@ class AuthService {
   AuthService._internal();
 
   final fb.FirebaseAuth _firebaseAuth = fb.FirebaseAuth.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    scopes: [
+      'https://www.googleapis.com/auth/calendar',
+      'https://www.googleapis.com/auth/calendar.events',
+    ],
+    serverClientId:
+        '413360382904-lcbr0ndivgtu7qt2vo5glbfkmh6c7eck.apps.googleusercontent.com',
+  );
 
   // Convert Firebase User → our User model
   User? _fromFirebase(fb.User? fbUser) {
@@ -143,6 +151,74 @@ class AuthService {
   bool isSignedIn() {
     return _firebaseAuth.currentUser != null;
   }
+
+  /// Check if Google Calendar is available (user signed in with Google)
+  Future<bool> checkGoogleCalendarAvailable() async {
+    try {
+      if (_googleSignIn.currentUser != null) return true;
+      final account = await _googleSignIn.signInSilently();
+      return account != null;
+    } catch (e) {
+      debugPrint('checkGoogleCalendarAvailable error: $e');
+      return false;
+    }
+  }
+
+  /// Get Google auth headers for API calls
+  Future<Map<String, String>?> getGoogleAuthHeaders() async {
+    try {
+      GoogleSignInAccount? account = _googleSignIn.currentUser;
+      account ??= await _googleSignIn.signInSilently();
+      if (account == null) {
+        debugPrint('getGoogleAuthHeaders: No Google account signed in');
+        return null;
+      }
+      final headers = await account.authHeaders;
+      debugPrint('getGoogleAuthHeaders: Got headers for ${account.email}');
+      return headers;
+    } catch (e) {
+      debugPrint('getGoogleAuthHeaders error: $e');
+      // Token expired, try re-authenticating
+      try {
+        final account = await _googleSignIn.signIn();
+        if (account == null) return null;
+        return await account.authHeaders;
+      } catch (e2) {
+        debugPrint('getGoogleAuthHeaders re-auth error: $e2');
+        return null;
+      }
+    }
+  }
+
+  /// Request Calendar scope (for email/password users who want Calendar)
+  Future<bool> requestCalendarAccess() async {
+    try {
+      GoogleSignInAccount? account = _googleSignIn.currentUser;
+      account ??= await _googleSignIn.signInSilently();
+      if (account == null) {
+        // User not signed in with Google yet, trigger sign-in
+        account = await _googleSignIn.signIn();
+        if (account == null) {
+          debugPrint('requestCalendarAccess: User cancelled Google sign-in');
+          return false;
+        }
+        debugPrint('requestCalendarAccess: Signed in as ${account.email}');
+      }
+      // Request calendar scopes explicitly
+      final granted = await _googleSignIn.requestScopes([
+        'https://www.googleapis.com/auth/calendar',
+        'https://www.googleapis.com/auth/calendar.events',
+      ]);
+      debugPrint('requestCalendarAccess: Scopes granted = $granted');
+      return granted;
+    } catch (e) {
+      debugPrint('requestCalendarAccess error: $e');
+      return false;
+    }
+  }
+
+  /// Get current Google account email (for display)
+  String? get googleEmail => _googleSignIn.currentUser?.email;
 
   // Reset password
   Future<String?> resetPassword(String email) async {

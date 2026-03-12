@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io' show Platform;
 import '../models/note_model.dart';
 import '../services/note_service.dart';
+import '../services/cloudinary_service.dart';
 import '../widgets/signature_dialog.dart';
 
 class EditScreen extends StatefulWidget {
@@ -19,12 +20,15 @@ class EditScreen extends StatefulWidget {
 
 class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
   final NoteService _noteService = NoteService();
+  final CloudinaryService _cloudinaryService = CloudinaryService();
   late TextEditingController _titleController;
   late TextEditingController _contentController;
   late Note _currentNote;
   bool _hasChanges = false;
   Timer? _saveTimer;
   final ImagePicker _imagePicker = ImagePicker();
+
+  bool _isUploading = false;
 
   bool get _hasContent {
     return _titleController.text.trim().isNotEmpty ||
@@ -79,21 +83,31 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _saveNote() async {
+    // Read text controller values safely (may be called during dispose)
+    String title;
+    String content;
+    try {
+      title = _titleController.text;
+      content = _contentController.text;
+    } catch (_) {
+      // Controllers already disposed, skip save
+      return;
+    }
+
     final updatedNote = _currentNote.copyWith(
-      title: _titleController.text,
-      content: _contentController.text,
+      title: title,
+      content: content,
       updatedAt: DateTime.now(),
-      imageBase64: _currentNote.imageBase64,
-      signaturePoints: _currentNote.signaturePoints,
     );
 
     debugPrint(
       'Saving note: id=${updatedNote.id}, title=${updatedNote.title}, '
       'hasImage=${updatedNote.imageBase64 != null}, '
-      'hasSignature=${updatedNote.signaturePoints != null}, '
-      'signaturePoints=${updatedNote.signaturePoints}',
+      'hasSignature=${updatedNote.signaturePoints != null}',
     );
 
+    // Update _currentNote so subsequent saves don't lose data
+    _currentNote = updatedNote;
     await _noteService.saveNote(updatedNote);
     _hasChanges = false;
   }
@@ -115,7 +129,18 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _saveTimer?.cancel();
-    _autoSave();
+    // Save synchronously before disposing controllers
+    // _handleBackButton already saved, so only save if still needed
+    if (_hasChanges || _hasContent) {
+      try {
+        final note = _currentNote.copyWith(
+          title: _titleController.text,
+          content: _contentController.text,
+          updatedAt: DateTime.now(),
+        );
+        _noteService.saveNote(note); // fire-and-forget
+      } catch (_) {}
+    }
     _titleController.dispose();
     _contentController.dispose();
     super.dispose();
@@ -154,30 +179,65 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
         return;
       }
 
-      final base64String = base64Encode(bytes);
+      // Show loading indicator
+      setState(() => _isUploading = true);
 
-      // Update state FIRST to avoid auto-save race condition
-      setState(() {
-        _currentNote = _currentNote.copyWith(imageBase64: base64String);
-        _hasChanges = true;
-      });
+      // Upload to Cloudinary
+      final cloudinaryUrl = await _cloudinaryService.uploadImage(bytes);
 
-      // Then persist
-      await _noteService.saveNote(
-        _currentNote.copyWith(
-          title: _titleController.text,
-          content: _contentController.text,
-          updatedAt: DateTime.now(),
-        ),
-      );
+      if (cloudinaryUrl != null) {
+        // Store Cloudinary URL (no base64 needed)
+        setState(() {
+          _currentNote = _currentNote.copyWith(
+            imageUrl: cloudinaryUrl,
+            imageBase64: null, // clear base64 since we use URL now
+          );
+          _hasChanges = true;
+          _isUploading = false;
+        });
 
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Đã thêm ảnh thành công')));
+        // Persist
+        await _noteService.saveNote(
+          _currentNote.copyWith(
+            title: _titleController.text,
+            content: _contentController.text,
+            updatedAt: DateTime.now(),
+          ),
+        );
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Đã upload ảnh lên Cloudinary')),
+          );
+        }
+      } else {
+        // Fallback: store as base64 locally
+        final base64String = base64Encode(bytes);
+        setState(() {
+          _currentNote = _currentNote.copyWith(imageBase64: base64String);
+          _hasChanges = true;
+          _isUploading = false;
+        });
+
+        await _noteService.saveNote(
+          _currentNote.copyWith(
+            title: _titleController.text,
+            content: _contentController.text,
+            updatedAt: DateTime.now(),
+          ),
+        );
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Upload Cloudinary thất bại, đã lưu ảnh cục bộ'),
+            ),
+          );
+        }
       }
     } catch (e) {
       debugPrint('Error picking/capturing image: $e');
+      setState(() => _isUploading = false);
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -271,7 +331,10 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
   }
 
   void _removeImage() {
-    final updatedNote = _currentNote.copyWith(imageBase64: null);
+    final updatedNote = _currentNote.copyWith(
+      imageBase64: null,
+      imageUrl: null,
+    );
     _noteService.saveNote(updatedNote);
     setState(() {
       _currentNote = updatedNote;
@@ -289,59 +352,136 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
   }
 
   Widget _buildImagePreview() {
-    if (_currentNote.imageBase64 == null) {
+    // Support both Cloudinary URL and legacy base64
+    final hasUrl = _currentNote.imageUrl != null;
+    final hasBase64 = _currentNote.imageBase64 != null;
+
+    if (!hasUrl && !hasBase64 && !_isUploading) {
       return const SizedBox.shrink();
     }
 
-    try {
-      final imageBytes = base64Decode(_currentNote.imageBase64!);
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 4),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: Colors.amber[100],
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Icon(Icons.image, color: Colors.amber[700], size: 18),
-                ),
-                const SizedBox(width: 10),
-                const Text(
-                  'Hình ảnh',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-                ),
-              ],
-            ),
+    Widget imageWidget;
+    if (_isUploading) {
+      imageWidget = Container(
+        height: 180,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: Colors.grey[200],
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 8),
+              Text('Đang upload lên Cloudinary...'),
+            ],
           ),
-          Stack(
+        ),
+      );
+    } else if (hasUrl) {
+      imageWidget = ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Image.network(
+          _currentNote.imageUrl!,
+          height: 180,
+          width: double.infinity,
+          fit: BoxFit.cover,
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) return child;
+            return Container(
+              height: 180,
+              width: double.infinity,
+              color: Colors.grey[200],
+              child: const Center(child: CircularProgressIndicator()),
+            );
+          },
+          errorBuilder: (context, error, stackTrace) {
+            return Container(
+              height: 180,
+              width: double.infinity,
+              color: Colors.grey[200],
+              child: const Center(child: Icon(Icons.broken_image, size: 48)),
+            );
+          },
+        ),
+      );
+    } else {
+      try {
+        final imageBytes = base64Decode(_currentNote.imageBase64!);
+        imageWidget = ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Image.memory(
+            imageBytes,
+            height: 180,
+            width: double.infinity,
+            fit: BoxFit.cover,
+          ),
+        );
+      } catch (e) {
+        debugPrint('Error displaying base64 image: $e');
+        return const SizedBox.shrink();
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 4),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Row(
             children: [
               Container(
+                padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.blue.withValues(alpha: 0.12),
-                      blurRadius: 8,
-                      spreadRadius: 1,
-                    ),
-                  ],
+                  color: Colors.amber[100],
+                  borderRadius: BorderRadius.circular(6),
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.memory(
-                    imageBytes,
-                    height: 180,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
+                child: Icon(Icons.image, color: Colors.amber[700], size: 18),
+              ),
+              const SizedBox(width: 10),
+              const Text(
+                'Hình ảnh',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+              ),
+              if (hasUrl) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.green[100],
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    'Cloudinary',
+                    style: TextStyle(fontSize: 10, color: Colors.green[800]),
                   ),
                 ),
+              ],
+            ],
+          ),
+        ),
+        Stack(
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.blue.withValues(alpha: 0.12),
+                    blurRadius: 8,
+                    spreadRadius: 1,
+                  ),
+                ],
               ),
+              child: imageWidget,
+            ),
+            if (!_isUploading)
               Positioned(
                 top: 12,
                 right: 12,
@@ -368,14 +508,10 @@ class _EditScreenState extends State<EditScreen> with WidgetsBindingObserver {
                   ),
                 ),
               ),
-            ],
-          ),
-        ],
-      );
-    } catch (e) {
-      debugPrint('Error displaying image: $e');
-      return const SizedBox.shrink();
-    }
+          ],
+        ),
+      ],
+    );
   }
 
   Widget _buildSignaturePreview() {

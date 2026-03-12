@@ -9,7 +9,8 @@ class Note {
   final String content;
   final DateTime createdAt;
   final DateTime updatedAt;
-  final String? imageBase64; // Base64 encoded image
+  final String? imageBase64; // Base64 encoded image (legacy/local)
+  final String? imageUrl; // Cloudinary image URL
   final List<List<double>>?
   signaturePoints; // Signature coordinates as list of [x, y]
 
@@ -20,8 +21,12 @@ class Note {
     required this.createdAt,
     required this.updatedAt,
     this.imageBase64,
+    this.imageUrl,
     this.signaturePoints,
   });
+
+  /// Whether this note has an image (either URL or base64)
+  bool get hasImage => imageUrl != null || imageBase64 != null;
 
   /// Convert Note to JSON
   Map<String, dynamic> toJson() {
@@ -32,28 +37,47 @@ class Note {
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
       'imageBase64': imageBase64,
-      'signaturePoints': signaturePoints,
+      'imageUrl': imageUrl,
+      'signaturePoints': signaturePoints?.map((p) => [p[0], p[1]]).toList(),
     };
   }
 
-  /// Create Note from JSON
+  /// Parse a DateTime from either a String or a Firestore Timestamp
+  static DateTime _parseDateTime(dynamic value) {
+    if (value is String) return DateTime.parse(value);
+    if (value is DateTime) return value;
+    // Firestore Timestamp has toDate()
+    try {
+      return (value as dynamic).toDate() as DateTime;
+    } catch (_) {
+      return DateTime.now();
+    }
+  }
+
+  /// Create Note from JSON (supports Firestore Timestamp fields)
   factory Note.fromJson(Map<String, dynamic> json) {
+    List<List<double>>? sigPoints;
+    try {
+      final raw = json['signaturePoints'];
+      if (raw != null && raw is List && raw.isNotEmpty) {
+        sigPoints = raw.map<List<double>>((point) {
+          final p = point as List;
+          return [(p[0] as num).toDouble(), (p[1] as num).toDouble()];
+        }).toList();
+      }
+    } catch (e) {
+      sigPoints = null;
+    }
+
     return Note(
-      id: json['id'] as String,
-      title: json['title'] as String,
-      content: json['content'] as String,
-      createdAt: DateTime.parse(json['createdAt'] as String),
-      updatedAt: DateTime.parse(json['updatedAt'] as String),
+      id: json['id'] as String? ?? '',
+      title: json['title'] as String? ?? '',
+      content: json['content'] as String? ?? '',
+      createdAt: _parseDateTime(json['createdAt']),
+      updatedAt: _parseDateTime(json['updatedAt']),
       imageBase64: json['imageBase64'] as String?,
-      signaturePoints: json['signaturePoints'] != null
-          ? List<List<double>>.from(
-              (json['signaturePoints'] as List).map(
-                (point) => List<double>.from(
-                  (point as List).map((e) => (e as num).toDouble()),
-                ),
-              ),
-            )
-          : null,
+      imageUrl: json['imageUrl'] as String?,
+      signaturePoints: sigPoints,
     );
   }
 
@@ -65,6 +89,7 @@ class Note {
     DateTime? createdAt,
     DateTime? updatedAt,
     dynamic imageBase64 = _undefined,
+    dynamic imageUrl = _undefined,
     dynamic signaturePoints = _undefined,
   }) {
     return Note(
@@ -76,6 +101,7 @@ class Note {
       imageBase64: identical(imageBase64, _undefined)
           ? this.imageBase64
           : imageBase64,
+      imageUrl: identical(imageUrl, _undefined) ? this.imageUrl : imageUrl,
       signaturePoints: identical(signaturePoints, _undefined)
           ? this.signaturePoints
           : signaturePoints,
@@ -84,7 +110,7 @@ class Note {
 
   @override
   String toString() {
-    return 'Note(id: $id, title: $title, content: $content, createdAt: $createdAt, updatedAt: $updatedAt, hasImage: ${imageBase64 != null}, hasSignature: ${signaturePoints != null})';
+    return 'Note(id: $id, title: $title, content: $content, createdAt: $createdAt, updatedAt: $updatedAt, hasImage: $hasImage, imageUrl: $imageUrl, hasSignature: ${signaturePoints != null})';
   }
 
   @override
@@ -98,6 +124,7 @@ class Note {
         other.createdAt == createdAt &&
         other.updatedAt == updatedAt &&
         other.imageBase64 == imageBase64 &&
+        other.imageUrl == imageUrl &&
         other.signaturePoints == signaturePoints;
   }
 
@@ -109,6 +136,7 @@ class Note {
         createdAt.hashCode ^
         updatedAt.hashCode ^
         imageBase64.hashCode ^
+        imageUrl.hashCode ^
         signaturePoints.hashCode;
   }
 }

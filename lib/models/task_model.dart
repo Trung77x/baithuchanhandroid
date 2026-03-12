@@ -57,6 +57,7 @@ class Task {
   final bool isCompleted;
   final int reminderMinutes; // Nhắc trước deadline bao nhiêu phút
   final String? color; // Mã màu hex
+  final String? googleEventId; // ID sự kiện Google Calendar
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -73,6 +74,7 @@ class Task {
     this.isCompleted = false,
     this.reminderMinutes = 30,
     this.color,
+    this.googleEventId,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -91,6 +93,7 @@ class Task {
       'isCompleted': isCompleted,
       'reminderMinutes': reminderMinutes,
       'color': color,
+      'googleEventId': googleEventId,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
     };
@@ -122,6 +125,7 @@ class Task {
       isCompleted: json['isCompleted'] as bool? ?? false,
       reminderMinutes: json['reminderMinutes'] as int? ?? 30,
       color: json['color'] as String?,
+      googleEventId: json['googleEventId'] as String?,
       createdAt: DateTime.parse(json['createdAt'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String),
     );
@@ -146,6 +150,7 @@ class Task {
     bool? isCompleted,
     int? reminderMinutes,
     String? color,
+    String? googleEventId,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -162,6 +167,7 @@ class Task {
       isCompleted: isCompleted ?? this.isCompleted,
       reminderMinutes: reminderMinutes ?? this.reminderMinutes,
       color: color ?? this.color,
+      googleEventId: googleEventId ?? this.googleEventId,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

@@ -342,7 +342,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   // Media Indicators
                   Row(
                     children: [
-                      if (note.imageBase64 != null)
+                      if (note.hasImage)
                         Padding(
                           padding: const EdgeInsets.only(right: 8),
                           child: Container(
@@ -417,13 +417,35 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 8),
                   // Image + Signature previews
-                  if (note.imageBase64 != null ||
+                  if (note.hasImage ||
                       (note.signaturePoints != null &&
                           note.signaturePoints!.isNotEmpty))
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        if (note.imageBase64 != null)
+                        if (note.imageUrl != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 6.0),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.network(
+                                note.imageUrl!,
+                                height: 120,
+                                width: double.infinity,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return Container(
+                                    height: 60,
+                                    color: Colors.grey[200],
+                                    child: const Center(
+                                      child: Icon(Icons.broken_image),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          )
+                        else if (note.imageBase64 != null)
                           Padding(
                             padding: const EdgeInsets.only(bottom: 6.0),
                             child: ClipRRect(
